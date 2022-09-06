@@ -1,0 +1,25 @@
+import "engine_sim.mr"
+import "themes/default.mr"
+
+//import "engines/audi/i5.mr" // audi_i5_2_2L()
+//import "engines/bmw/M52B28.mr"
+//import "engines/chevrolet/engine_03_for_e1.mr"
+//import "engines/ferrari/F136_FB.mr"
+//import "engines/kawasaki/er6.mr" // ER6N()
+//import "engines/misc/tricrank.mr"
+//import "engines/subaru/boxer.mr" // ej22()
+//import "engines/vb/vbv4.mr"
+//import "engines/vb/vbv6.mr"
+//import "engines/Yamaha/yz450.mr" // YZ()
+//import "engines/subaru_ej25.mr"
+//import "engines/Toyota/toyota_2jz_ge.mr"
+//import "engines/Honda/honda_c30a.mr"
+//import "engines/Porsche/porsche_980_01.mr"
+import "engines/dodge/dodge_viper_srii.mr"
+//import "engines/cosworth/cosworth_dfv.mr"
+//import "engines/bmw/bmw_s70_2.mr"
+
+use_default_theme()
+set_engine(
+    dodge_viper_srii()
+)

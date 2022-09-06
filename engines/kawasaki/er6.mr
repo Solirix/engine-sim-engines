@@ -1,0 +1,300 @@
+import "engine_sim.mr"
+import "../../part-library/part_library.mr"
+
+units units()
+constants constants()
+
+label cycle(2 * 360 * units.deg)
+label sparkadvance(-20 * units.deg)
+
+private node wires {
+    output wire1: ignition_wire();
+    output wire2: ignition_wire();
+
+}
+
+// Firing order : 3, 1, 2, 0 : 4, 2, 3, 1
+public node ER6N_distributor {
+    input wires;
+    input timing_curve;
+    input rev_limit;
+    alias output __out:
+        ignition_module(timing_curve: timing_curve, rev_limit: rev_limit, limiter_duration: 0.02 * units.sec)
+            .connect_wire(wires.wire1, ((0.0/8.0) * cycle) + sparkadvance)
+            .connect_wire(wires.wire2, ((2.0/8.0) * cycle) + sparkadvance);
+}
+
+public node ER6N_intake_lobe_profile {
+    alias output __out:
+        harmonic_cam_lobe(
+            duration_at_50_thou: 200 * units.deg,
+            gamma: 1.1,
+            lift: 10 * units.mm,
+            steps: 100
+        );
+}
+
+public node ER6N_exhaust_lobe_profile {
+    alias output __out:
+        harmonic_cam_lobe(
+            duration_at_50_thou: 212 * units.deg,
+            gamma: 1.1,
+            lift: 12 * units.mm,
+            steps: 100
+        );
+}
+
+public node ER6N_camshaft_builder {
+    input lobe_profile: ER6N_intake_lobe_profile();
+	input ex_lobe_profile: ER6N_exhaust_lobe_profile();
+    input intake_lobe_profile: lobe_profile;
+    input exhaust_lobe_profile: ex_lobe_profile;
+    input lobe_separation: 105.0 * units.deg;
+    input intake_lobe_center: lobe_separation;
+    input exhaust_lobe_center: lobe_separation;
+    input advance: -30.0 * units.deg;
+    input base_radius: 0.6 * units.inch;
+
+    output intake_cam_0: _intake_cam_0;
+    output exhaust_cam_0: _exhaust_cam_0;
+
+    camshaft_parameters params(
+        advance: advance,
+        base_radius: base_radius
+    )
+
+    camshaft _intake_cam_0(params, lobe_profile: intake_lobe_profile)
+    camshaft _exhaust_cam_0(params, lobe_profile: exhaust_lobe_profile)
+
+    label rot90(90 * units.deg)
+    label rot360(360 * units.deg)
+
+    _intake_cam_0
+        .add_lobe(rot360 + intake_lobe_center + 0 * rot90)
+		.add_lobe(rot360 + intake_lobe_center + 2 * rot90)
+	_exhaust_cam_0
+        .add_lobe(rot360 - intake_lobe_center + 0 * rot90)
+		.add_lobe(rot360 - intake_lobe_center + 2 * rot90)
+}
+
+private node add_flow_sample {
+    input lift;
+    input flow;
+    input this;
+    alias output __out: this;
+
+    this.add_sample(lift * units.thou, k_28inH2O(flow))
+}
+
+public node ER6N_head {
+    input intake_camshaft;
+    input exhaust_camshaft;
+    input chamber_volume: 45.0 * units.cc;
+    input flip_display: false;
+    alias output __out: head;
+
+    function intake_flow(50 * units.thou)
+    intake_flow
+        .add_flow_sample(0, 0)
+        .add_flow_sample(160, 135)
+        .add_flow_sample(210, 186)
+        .add_flow_sample(260, 210)
+        .add_flow_sample(310, 256)
+        .add_flow_sample(360, 285)
+        .add_flow_sample(410, 322)
+        .add_flow_sample(460, 330)
+        .add_flow_sample(510, 365)
+        .add_flow_sample(560, 385)
+        .add_flow_sample(610, 404)
+        .add_flow_sample(660, 410)
+        .add_flow_sample(710, 424)
+        .add_flow_sample(760, 424)
+        .add_flow_sample(810, 424)
+
+    function exhaust_flow(50 * units.thou)
+    exhaust_flow
+        .add_flow_sample(0, 0)
+        .add_flow_sample(160, 135)
+        .add_flow_sample(210, 180)
+        .add_flow_sample(260, 210)
+        .add_flow_sample(310, 242)
+        .add_flow_sample(360, 250)
+        .add_flow_sample(410, 266)
+        .add_flow_sample(460, 280)
+        .add_flow_sample(510, 291)
+        .add_flow_sample(560, 301)
+        .add_flow_sample(610, 317)
+        .add_flow_sample(660, 324)
+        .add_flow_sample(710, 338)
+        .add_flow_sample(760, 338)
+        .add_flow_sample(810, 338)
+
+    cylinder_head head(
+        chamber_volume: chamber_volume,
+        intake_runner_volume: 400.00 * units.cc,
+        intake_runner_cross_section_area: 12.00 * units.cm2,
+
+        intake_port_flow: intake_flow,
+        exhaust_port_flow: exhaust_flow,
+        intake_camshaft: intake_camshaft,
+        exhaust_camshaft: exhaust_camshaft,
+        flip_display: flip_display
+    )
+}
+
+public node ER6N {
+    alias output __out: engine;
+
+    engine engine(
+        name: "ER6N",
+        starter_torque: 25 * units.lb_ft,
+        starter_speed: 600 * units.rpm,
+        redline: 11000 * units.rpm,
+        fuel: fuel(
+            max_turbulence_effect: 2.0,
+            burning_efficiency_randomness: 0.2,
+            max_burning_efficiency: 1.00
+        )
+    )
+
+    wires wires()
+
+    crankshaft c0(
+        throw: 60 * units.mm/2,
+        flywheel_mass: 0.4 * units.lb,
+        mass: 4 * units.lb,
+        friction_torque: 7.0 * units.lb_ft,
+        moment_of_inertia: 0.03,
+        position_x: 0.0,
+        position_y: 0.0,
+        tdc: (constants.pi / 4) + 0 * units.deg
+    )
+
+    rod_journal rj0(angle: 0.0 * units.deg)
+	rod_journal rj1(angle: 180.0 * units.deg)
+    c0
+        .add_rod_journal(rj0)
+        .add_rod_journal(rj1)
+
+    piston_parameters piston_params(
+        mass: 172 * units.g,
+        compression_height: 30.00 * units.mm,
+        wrist_pin_position: 0.0,
+        displacement: -5 * units.cc
+    )
+
+    connecting_rod_parameters cr_params(
+        mass: 75.0 * units.g,
+        moment_of_inertia: 0.0014,
+        center_of_mass: 0.0,
+        length: 113 * units.mm
+    )
+
+    cylinder_bank_parameters bank_params(
+        bore: 83 * units.mm,
+        deck_height: 180 * units.mm
+    )
+
+    performer_rpm_intake intake(
+        carburetor_cfm: 1400.0,
+        idle_flow_rate_cfm: 0.005,
+        idle_throttle_plate_position: 0.9985
+    )
+
+    exhaust_system_parameters es_params(
+        outlet_flow_rate: k_carb(1550.0),
+        primary_tube_length: 50.0 * units.inch,
+        primary_flow_rate: k_carb(1550.0),
+        velocity_decay: 0.0,
+        volume: 140.0 * units.L
+    )
+
+    impulse_response ir0(filename: "../../sound-library/smooth/smooth_35.wav", volume: 0.001)
+    exhaust_system exhaust0(es_params, audio_volume: 1.0, impulse_response: ir0)
+
+    cylinder_bank b0(bank_params, angle: 0 * units.deg)
+    b0
+        .add_cylinder(
+            piston: piston(piston_params, blowby: k_28inH2O(0.1)),
+            connecting_rod: connecting_rod(cr_params),
+            rod_journal: rj0,
+            intake: intake,
+            exhaust_system: exhaust0,
+            ignition_wire: wires.wire1
+        )
+		.add_cylinder(
+            piston: piston(piston_params, blowby: k_28inH2O(0.1)),
+            connecting_rod: connecting_rod(cr_params),
+            rod_journal: rj1,
+            intake: intake,
+            exhaust_system: exhaust0,
+            ignition_wire: wires.wire2
+        )
+
+    engine.add_cylinder_bank(b0)
+    engine.add_crankshaft(c0)
+
+    ER6N_camshaft_builder camshaft(
+        lobe_profile: ER6N_intake_lobe_profile(),
+		ex_lobe_profile: ER6N_exhaust_lobe_profile()
+    )
+
+    b0.set_cylinder_head (
+        ER6N_head(
+            chamber_volume: 22.5 * units.cc,
+            intake_camshaft: camshaft.intake_cam_0,
+            exhaust_camshaft: camshaft.exhaust_cam_0
+        )
+    )
+
+
+    function timing_curve(1000 * units.rpm)
+    timing_curve
+        .add_sample(0 * units.rpm, 0 * units.deg)
+		.add_sample(1000 * units.rpm, 14 * units.deg)
+		.add_sample(2000 * units.rpm, 22 * units.deg)
+		.add_sample(3000 * units.rpm, 26 * units.deg)
+		.add_sample(4000 * units.rpm, 33 * units.deg)
+		.add_sample(5000 * units.rpm, 34 * units.deg)
+		.add_sample(6000 * units.rpm, 35 * units.deg)
+		.add_sample(7000 * units.rpm, 36 * units.deg)
+		.add_sample(8000 * units.rpm, 40 * units.deg)
+		.add_sample(9000 * units.rpm, 45 * units.deg)
+		.add_sample(10000 * units.rpm, 50 * units.deg)
+        .add_sample(10000 * units.rpm, 55 * units.deg)
+
+
+    engine.add_ignition_module(
+        ER6N_distributor(
+            wires: wires,
+            timing_curve: timing_curve,
+            rev_limit: 11000 * units.rpm
+        ))
+}
+
+public node ER6N_vehicle {
+	alias output __out: vehicle;
+	vehicle vehicle(
+		mass: 204 * units.kg,
+		drag_coefficient: 0.0012,
+		cross_sectional_area: (2110 * units.mm) * (770 * units.mm),
+		diff_ratio: 10.00,
+		tire_radius: 17 * units.inch,
+		rolling_resistance: 900
+		)
+}
+
+public node ER6N_transmission {
+    alias output __out: trans;
+    transmission trans(
+        max_clutch_torque: 300 * units.lb_ft
+        )
+
+    trans
+        .add_gear(2.438)
+        .add_gear(1.714)
+        .add_gear(1.333)
+        .add_gear(1.111)
+        .add_gear(0.966)
+        .add_gear(0.852)
+}
